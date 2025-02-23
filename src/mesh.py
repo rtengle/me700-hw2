@@ -99,8 +99,6 @@ class Element():
             Function that returns the global matrix for the given DOFs. Externally specified because some DoFs may be scalar fields or transform weirdly.
         orientation : ndarray
             A 3D vector representing a vector in the xy-plane of the element. Used to construct the local rotation matrix.
-        **kwargs
-            Extra arguments that are passed to the stiffness and body_forces functions. These represent system constants throughout the analysis.
         """
         # Initializes element of mesh with a stiffness method and body method that are able to be dynamically updated along with an orientation vector.
         self.stiffness_method = stiffness
@@ -244,7 +242,7 @@ class Element():
         fb = np.append(fb1, fb2)
         G = self.global_transform(nodes)
         self.global_stiffness_matrix = G @ K @ G.T
-        global_fb = (G @ fb)
+        global_fb = G @ fb
         fg1, fg2 = np.split(global_fb, 2)
         self.global_body_forces = (fg1, fg2)
         return self.global_stiffness_matrix, self.global_body_forces
@@ -252,19 +250,30 @@ class Element():
 
 
 class Mesh(Graph):
+    #TODO: Finish up docstrings and comments apart from basic functionality
+    """Class of a mesh containing nodes connected by elements. These elements act as subdomains of the system while the nodes act as subboundaries.
+    These are connected through linear relationships of the form f = Kx with a set of prescribed f and x.
+    """
     def __init__(self, dof):
         self.node_dof = dof
         super().__init__()
 
-    def add_node(self, id, pos, bc=None, bf=None):
+    def add_node(self, id: int, pos: np.ndarray, bc=None, bf=None):
+        """Adds a node with an integer identifier, a position vector, a set of boundary conditions, and set of forces
+        """
         if type(bc) != np.ndarray and bc == None:
             bc = self.dof
         super().add_node(node_for_adding=id, object=Node(pos=pos, bc=bc, bf=bf))
 
     def add_element(self, element: Element, n1, n2):
+        """Adds an element connected by two nodes. Direction is n1 --> n2
+        """
         super().add_edge(n1, n2, object=element)
 
     def add_stiffness(self, K_local, n1, n2):
+        """Adds the local stiffness matrix (in the global coordinates) of element connected by node indicies n1 and n2 
+        to the total global stiffness matrix.
+        """
         # Have to do it this way bc python is lame and doesn't allow you to append slices together.
         # Trying to do it with arrays also messes up the axes.
         n1_slice = slice(self.node_dof*n1, self.node_dof*(n1+1))
@@ -299,40 +308,58 @@ class Mesh(Graph):
             self.add_stiffness(K_local, n1, n2)
 
     def add_forces(self, i, node: Node):
+        """Adds forces on a node with index i to the total global external forces vector"""
         self.external_forces[i*self.node_dof:(i+1)*self.node_dof] += node.bf
 
     def set_boundary_conditions(self, i, node: Node):
+        """Specifies the boundary conditions of a given node in the total boundary condition vector"""
         self.total_bc[self.node_dof*i:(i+1)*self.node_dof] = node.bc
 
     def iterate_nodes(self):
+        """Iterates of the nodes to add force and boundary conditions to the total vectors"""
         for (i, node) in self.nodes.data('object'):
             self.add_forces(i, node)
             self.set_boundary_conditions(i, node)
 
     def get_shuffle_matrix(self):
+        """Gets the shuffle matrix describing how the system is shuffled around to separate free DoFs from fixed DoFs"""
+        # Sort the boundary conditions in the form [float, ..., nan, ...] and returns the indexing that does this shuffling.
+        # In this form, the fixed DoFs are given first and the free DoFs are given last
         bc_sorted = np.argsort(self.total_bc)
+        # Initializes shuffle matrix
         self.shuffle_matrix = np.zeros((self.total_dof, self.total_dof))
-        self.bc_shuffle =  np.zeros(self.total_dof)
+        # Iterates through the sorted indexes and constructs the shuffle matrix
         for end_index, start_index in zip(range(self.total_dof), bc_sorted):
             self.shuffle_matrix[end_index, start_index] = 1
+        # Gets the shuffled boundary conditions
         self.bc_shuffle = self.total_bc[bc_sorted]
 
     def shuffle_system(self):
+        """Shuffles the system so that the free DoFs are on the top and fixed DoFs are on the bottom"""
+        # Gets the matrix describing how the system is shuffled. These are a special class of rotation matrices
         self.get_shuffle_matrix()
-        self.K_shuffle = self.shuffle_matrix.T @ self.K_total @ self.shuffle_matrix
+        # Shuffles the K matrix to the new set of systems.
+        self.K_shuffle = self.shuffle_matrix @ self.K_total @ self.shuffle_matrix.T
+        # Shuffles the forces
         self.shuffled_forces = self.shuffle_matrix @ self.external_forces
         
 
     def assemble_global(self):
+        """Assembles the total global stiffness matrix for the full mesh system"""
         # Iterate through edges, update them, grab their stiffness matrices, and sum them
+
+        # Initializing important variables 
         self.total_dof = self.node_dof*self.number_of_nodes()
         self.K_total = np.zeros((self.total_dof, self.total_dof))
         self.external_forces = np.zeros(self.total_dof)
         self.total_bc = np.full(self.total_dof, np.nan)
+
+        # Iteration methods
         self.iterate_elements()
         self.iterate_nodes()
 
     def solve_shuffle(self):
+        """Solves the shuffled system of equations"""
         # Find out when nan ends
         sep_index = np.where(np.isnan(self.bc_shuffle))[0][0] # approaches backwards
 
@@ -350,14 +377,19 @@ class Mesh(Graph):
         self.f_shuffle = self.K_shuffle @ self.x_shuffle - self.shuffled_forces
 
     def unshuffle_solution(self):
+        """Undoes the shuffled solution"""
         self.x_total = self.shuffle_matrix.T @ self.x_shuffle
         self.f_total = self.shuffle_matrix.T @ self.f_shuffle
 
     def solve(self):
+        """Solves the system after defining"""
         # Assembles global matrix
         self.assemble_global()
+        # Shuffles the system
         self.shuffle_system()
+        # Solves the system
         self.solve_shuffle()
+        # Unshuffles the system
         self.unshuffle_solution()
         
         return self.x_total, self.f_total
