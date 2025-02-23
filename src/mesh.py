@@ -7,6 +7,18 @@ def unit(v):
     return v/np.linalg.norm(v)
 
 class Node():
+    """Class representing a Mesh node in a truss system.
+    
+    Attributes
+    ----------
+
+    pos : ndarray
+        3D vector representing the position of the node.
+    bc : ndarray
+        Vector representing the displacement boundary conditions of the node. NaN means it's free along that DoF
+    bf : ndarray
+        Total external forces acting on that node. Used for solving the system.
+    """
     def __init__(self, pos: np.ndarray, bc: np.ndarray, bf = None):
         # Initializes node using a position vector with a set of displacement boundary conditions. NaN is considered free.
         self.pos = pos
@@ -17,12 +29,38 @@ class Node():
             self.bf = bf
 
     def add_bf(self, bf):
+        """Adds a body force contribution to the node.
+
+        Attributes
+        ----------
+
+        bf : ndarray
+            Array representing the force contributions along the DoF
+        """
         self.bf = self.bf + bf
 
     def set_bc(self, bc: np.ndarray):
+        """Sets the total displacement boundary conditions in the node
+        
+        Attributes
+        ----------
+
+        bc : ndarray
+            Vector represention of the displacement boundary. NaN is free along that DoF
+        """
         self.bc = bc
 
-    def add_bc(self, bc: float, dof: type[int | slice]):
+    def add_bc(self, bc: type[float | np.ndarray], dof: type[int | slice]):
+        """Sets the boundary condition at a specific DoF
+        
+        Attributes
+        ----------
+
+        bc : float, ndarray
+            Boundary condition value. NaN means it's free in that DoF
+        dof : int, slice
+            DoF index or set of DoFs that are being changed.
+        """
         self.bc[dof] = bc
 
 class Element():
@@ -70,17 +108,54 @@ class Element():
         self.transformation_method = transform
         self.orientation = unit(orientation)
 
-    def reorient(self, xvec, output=True):
-        # Properly orients element based on a given length vector
+    def reorient(self, xvec: np.ndarray, output:bool=True):
+        """Function that sets the rotation matrix transforming local --> global.
+        
+        Attributes
+        ----------
+
+        xhat : ndarray
+            3D unit vector representing the length of the element
+        output : bool
+            Boolean that specifies if the rotation should be returned
+
+        Returns
+        -------
+
+        self.rotation : ndarray
+            3x3 rotation matrix transforming the local coordinates to the global coordinates
+        """
+        # Calculates the unit vector of x
         xhat = unit(xvec)
+        # Gets the z vector from crossing the x and xy vectors
         zhat = unit(np.cross(xvec, self.orientation))
+        # Gets the y  vector from the z and x vector 
         yhat = np.cross(zhat, xhat)
+        # Sets the rotation internally and outputs the results if desired
         self.rotation = np.array([xhat, yhat, zhat]).T
         if output == True:
             return self.rotation
 
-    def local_stiffness(self, nodes, state, output=True):
-        # Updates the local stiffness matrix based on some state. Also outputs the results if desired.
+    def local_stiffness(self, nodes: tuple, state = None, output:bool=True):
+        """Function that automatically calculates the local stiffness matrix based on the state and nodes based on a specified method.
+
+        Attributes
+        ----------
+        
+        nodes : (Node, Node)
+            Tuple of Node objects representing the start and end point of the edge. 
+        state : None, dict
+            State dictionary containing a set of data for the element to calculate the stiffness matrix
+        output : bool
+            Boolean that specifies if the local stiffness matrix should be returned
+
+        Returns
+        -------
+        
+        self.local_stiffness_matrix : ndarray
+            Local stiffness matrix in the element's local coordinates
+        """
+        # Just calls the method assigned in the contructor
         if state == None:
             self.local_stiffness_matrix = self.stiffness_method(nodes)
         else:
@@ -88,8 +163,26 @@ class Element():
         if output == True:
             return self.local_stiffness_matrix
     
-    def local_body_forces(self, nodes, state, output=True):
-        # Updates the body force tuple based on some state. Also outputs the results if desired.
+    def local_body_forces(self, nodes, state=None, output=True):
+        """Calculates the local body forces for a set of nodes and a state
+        
+        Attributes
+        ----------
+        
+        nodes : (Node, Node)
+            Tuple of Node objects representing the start and end point of the edge. 
+        state : None, dict
+            State dictionary containing a set of data for the element to calculate the stiffness matrix
+        output : bool
+            Boolean that specifies if the local body force contributions should be returned
+
+        Returns
+        -------
+        
+        self.local_stiffness_matrix : ndarray
+            Local body force contributions in the element's local coordinates
+        """
+        # Just calls the method assigned in the constructor. If it's an int, it just creates an empty 1D vector
         if type(self.body_forces_method) == int:
             self.body_forces_pair = (np.zeros(self.body_forces_method), np.zeros(self.body_forces_method))
             if output == True:
@@ -102,18 +195,52 @@ class Element():
             if output == True:
                 return self.body_forces_pair
     
-    def global_transform(self, nodes, output=True):
+    def global_transform(self, nodes: tuple, output=True):
+        """Creates the global transformation matrix that transitions from the local DoF frame to the global DoF frame based on a rotation matrix:
+        This needs to be its own matrix because there are multiple sets of transforms and some DoFs don't such as temperature or charge.
+
+        Attributes
+        ----------
+        
+        nodes : tuple
+            Tuple of nodes used to get the x-vector when passing to the reorient method
+        output : bool
+            Boolean used to determine if the full transform should be returned
+
+        Returns
+        -------
+        
+        self.global_transformation_matrix : ndarray
+            Matrix that transforms the local element DoFs to the global DoF frame.
+        """
+        # Gets the x-vector
         node1, node2 = nodes
         L = node2.pos - node1.pos
+        # Gets the global transformation matrix and returns it if needed
         self.global_transformation_matrix = self.transformation_method(self.reorient(L))
         if output == True:
             return self.global_transformation_matrix
-
         
     def global_coords(self, nodes: tuple, state=None):
+        """Gets the stiffness matrix and body force for the element in the global reference frame.
+        
+        Attributes
+        ----------
+        nodes : tuple
+            Tuple containing the connecting nodes
+        state
+            Set of data relevant in calculating the forces and stiffness matrix
+
+        Returns
+        -------
+        self.global_stiffness_matrix : ndarray
+            Stiffness matrix of the element in the global reference frame
+        self.global_body_forces : tuple
+            Tuple of the body force contributions from the node in the global reference frame
+        """
         # Gets the global coordinate values for the stiffness and body forces
-        K = self.local_stiffness(nodes, state)
-        fb1, fb2 = self.local_body_forces(nodes, state)
+        K = self.local_stiffness(nodes, state=state)
+        fb1, fb2 = self.local_body_forces(nodes, state=state)
         fb = np.append(fb1, fb2)
         G = self.global_transform(nodes)
         self.global_stiffness_matrix = G @ K @ G.T
