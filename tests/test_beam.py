@@ -1,8 +1,6 @@
-from mesh import Mesh
-from beam import Beam
 import numpy as np
-import pytest
 from functions_for_pytest import *
+import pytest
 
 def test_x_axial():
     mesh, x, d, f, r = run_test_x_axial()

@@ -10,9 +10,9 @@ def run_test_x_axial():
     E = 100
     L = 3
     A = 6
-    Iy = 1
-    Iz = 1
-    J = 1
+    Iy = 6
+    Iz = 3
+    J = 2
     v = 0.2
 
     mesh.add_node(0, np.array([0,0,0]), np.zeros(6))
