@@ -24,7 +24,7 @@ class Node():
         self.pos = pos
         self.bc = bc
         if type(bf) != np.ndarray and bf == None:
-            self.bf = np.ndarray(len(bc))
+            self.bf = np.zeros(len(bc))
         else:
             self.bf = bf
 
