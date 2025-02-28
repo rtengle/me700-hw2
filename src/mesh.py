@@ -6,6 +6,8 @@ def unit(v):
     # Adding in a function that should be a default in numpy: getting the unit vector
     return v/np.linalg.norm(v)
 
+
+
 class Node():
     """Class representing a Mesh node in a truss system.
     
@@ -63,6 +65,13 @@ class Node():
         """
         self.bc[dof] = bc
 
+    def set_solution(self, x, f):
+        """Sets the solved displacements and forces for a given node."""
+        self.x_sol = x
+        self.f_sol = self.bf + f
+
+
+
 class Element():
     """A class representing an element inside of a MSA mesh. The element contains information pertaining to the constitutive equation:
 
@@ -86,7 +95,7 @@ class Element():
         3 x 3 rotation matrix representing the change in coordinates systems from the local to the global
     
     """
-    def __init__(self, stiffness: Callable, body_forces: type[int | Callable], transform: Callable, orientation: np.ndarray, **kwargs):
+    def __init__(self, stiffness: Callable, body_forces: type[int | Callable], transform: Callable, orientation: np.ndarray, shape_function: Callable):
         """Constructs an Element based on a set of given functions and transformations.
         
         Parameters
@@ -105,6 +114,7 @@ class Element():
         self.body_forces_method = body_forces
         self.transformation_method = transform
         self.orientation = unit(orientation)
+        self.shape = shape_function
 
     def reorient(self, xvec: np.ndarray, output:bool=True):
         """Function that sets the rotation matrix transforming local --> global.
@@ -381,6 +391,13 @@ class Mesh(Graph):
         self.x_total = self.shuffle_matrix.T @ self.x_shuffle
         self.f_total = self.shuffle_matrix.T @ self.f_shuffle
 
+    def assign_solution(self):
+        """Assigns the solved forces and displacements to their respective nodes"""
+        for (n, node) in self.nodes.data('object'):
+            x = self.x_total[n*self.node_dof:(n+1)*self.node_dof]
+            f = self.f_total[n*self.node_dof:(n+1)*self.node_dof]
+            node.set_solution(x, f)
+
     def solve(self):
         """Solves the system after defining"""
         # Assembles global matrix
@@ -391,5 +408,7 @@ class Mesh(Graph):
         self.solve_shuffle()
         # Unshuffles the system
         self.unshuffle_solution()
+        # Assigns the solved forces and displacements to the nodes
+        self.assign_solution()
         
         return self.x_total, self.f_total

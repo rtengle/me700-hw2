@@ -1,4 +1,4 @@
-from mesh import Element
+from mesh import Element, Mesh
 import numpy as np
 
 class Beam(Element):
@@ -66,3 +66,4 @@ class Beam(Element):
 
         update_stiffness = lambda nodes: self.beam_stiffness(nodes)
         super().__init__(update_stiffness, 6, self.beam_transform, y)
+
