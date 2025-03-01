@@ -1,6 +1,7 @@
 from networkx import Graph
 from typing import Callable
 import numpy as np
+import matplotlib.pyplot as plt
 
 def unit(v):
     # Adding in a function that should be a default in numpy: getting the unit vector
@@ -114,7 +115,7 @@ class Element():
         self.body_forces_method = body_forces
         self.transformation_method = transform
         self.orientation = unit(orientation)
-        self.shape = shape_function
+        self.shape_function = shape_function
 
     def reorient(self, xvec: np.ndarray, output:bool=True):
         """Function that sets the rotation matrix transforming local --> global.
@@ -412,3 +413,31 @@ class Mesh(Graph):
         self.assign_solution()
         
         return self.x_total, self.f_total
+    
+    def plot(self, ax, disp_scale=1, force_scale=1, node_format = 'b', element_format = 'b', shape=True, xi_steps = 50):
+        """Plots the entire mesh using the shape functions. General plotting format:
+        
+        - Nodes are points
+        - Elements are lines w/ their normalized orientation vector at the center
+        - Shape functions are used if enabled (default yes)
+        """
+        for (n, node) in self.nodes.data('object'):
+            ax.scatter(*node.pos, marker='o', color='k')
+            ax.quiver(*node.pos, *(force_scale*unit(node.bf[0:3])), color='k')
+            ax.quiver(*node.pos, *(force_scale*unit(node.bf[3:6])), linestyle='dashed', color='k')
+            ax.text(*node.pos, "Node {n}", color='red')
+        
+        for (n1, n2, el) in self.edges.data('object'):
+            xi_list = np.linspace(0, 1, xi_steps)
+            node1 = self.nodes[n1]['object']
+            node2 = self.nodes[n2]['object']
+            node_tuple = (node1, node2)
+            displacements = el.shape_function(node_tuple, xi_list)
+            origins = [node1.pos*(1-xi) + node2.pos*xi for xi in xi_list]
+            new_shapes = np.array([x + (u*disp_scale) for x, u in zip(origins, displacements)])
+            origins_array = np.array(origins)
+            ax.plot(origins_array[:,0], origins_array[:, 1], origins_array[:, 2], 'k--')
+            ax.plot(new_shapes[:,0], new_shapes[:,1], new_shapes[:,2], 'k')
+            ax.text(*(node1.pos + node2.pos)/2, "El. ({n1}, {n2})", color='green')
+            
+

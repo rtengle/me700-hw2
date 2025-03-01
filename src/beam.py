@@ -54,6 +54,41 @@ class Beam(Element):
         G[9:12, 9:12] = g
         return G
 
+    def beam_shape(self, nodes, steps):
+        # Gets nodes
+        # Gets L and position of node 1
+        # Gets polynomial coefficients for shape function
+        node1, node2 = nodes
+        L = np.linalg.norm(node2.pos - node1.pos)
+        disp = self.beam_transform(self.rotation).T @ np.append(node1.x_sol, node2.x_sol)
+        ushape_matrix = np.zeros((4, 12))
+        vshape_matrix = np.zeros((4,12))
+        wshape_matrix = np.zeros((4,12))
+        axial_shape_matrix = np.array([
+            [1, 0],
+            [-1, 1],
+            [0,0],
+            [0,0]
+        ])
+        bending_shape_matrix = np.array([
+            [1, 0, 0, 0],
+            [0, L, 0, 0],
+            [-3, -2*L, 3, -L],
+            [2, L, -2, L]
+        ])
+        ushape_matrix[:, [0, 6]] = axial_shape_matrix
+        ushape_coeff = ushape_matrix @ disp
+        vshape_matrix[:,1:12:3] = bending_shape_matrix
+        vshape_coeff = vshape_matrix @ disp
+        wshape_matrix[:,2:12:3] = bending_shape_matrix
+        wshape_coeff = wshape_matrix @ disp
+        vwshape_coeff = np.append(np.array([vshape_coeff]), np.array([wshape_coeff]), axis=0)
+        uvwshape_coeff = np.append(np.array([ushape_coeff]), vwshape_coeff, axis=0)
+
+        return [
+            self.rotation @ uvwshape_coeff @ np.array([1, xi, xi**2, xi**3])
+            for xi in steps
+        ]
 
 
     def __init__(self, E: float, A: float, Iy: float, Iz: float, J:float, v: float, y: np.ndarray):
@@ -65,5 +100,6 @@ class Beam(Element):
         self.v = v
 
         update_stiffness = lambda nodes: self.beam_stiffness(nodes)
-        super().__init__(update_stiffness, 6, self.beam_transform, y)
+        shape = lambda nodes, steps: self.beam_shape(nodes, steps=steps)
+        super().__init__(update_stiffness, 6, self.beam_transform, y, shape)
 

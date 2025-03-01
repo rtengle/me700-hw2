@@ -1,12 +1,67 @@
 import numpy as np
 from functions_for_pytest import *
+import matplotlib.pyplot as plt
 
-mesh, x, d, f, r = run_test_x_axial()
+def set_axes_equal(ax):
+    """
+    Make axes of 3D plot have equal scale so that spheres appear as spheres,
+    cubes as cubes, etc.
 
-print(np.linalg.norm(d - x) <= 1e-6)
-print(np.linalg.norm(r - f) <= 1e-6)
+    Input
+      ax: a matplotlib axis, e.g., as output from plt.gca().
+    """
 
-mesh, x, d, f, r = run_test_xyz_axial()
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
 
-print(np.linalg.norm(d - x) <= 1e-6)
-print(np.linalg.norm(r - f) <= 1e-6)
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    # The plot bounding box is a sphere in the sense of the infinity
+    # norm, hence I call half the max range the plot radius.
+    plot_radius = 0.5*max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+mesh = Mesh(6)
+
+F = np.array([0.1, 0.05, -0.07])
+M = np.array([0.05, -0.1, 0.25])
+bf1 = np.append(F, M)
+
+mesh.add_node(0, pos=np.array([0, 0, 10]), bc=np.zeros(6))
+mesh.add_node(1, pos=np.array([15, 0, 10]), bc=np.full(6, np.nan), bf=bf1)
+mesh.add_node(2, pos=np.array([15, 0, 0]), bc=np.array([0, 0, 0, np.nan, np.nan, np.nan]))
+
+b = 0.5
+h = 1
+A = b*h
+Iz = h*b**3/12
+Iy = b*h**3/12
+J = 0.02861
+E = 1000
+v = 0.3
+
+beam1 = Beam(E=E, A=A, Iy=Iy, Iz=Iz, J=J, v=v, y=np.array([0, 0, 1]))
+beam2 = Beam(E=E, A=A, Iy=Iy, Iz=Iz, J=J, v=v, y=np.array([1, 0, 0]))
+
+mesh.add_element(beam1, 0, 1)
+mesh.add_element(beam2, 1, 2)
+
+x, f = mesh.solve()
+
+fig = plt.figure()
+ax = fig.add_subplot(projection='3d')
+mesh.plot(ax, disp_scale=1, force_scale=5)
+ax.set_xlabel('X-Axis')
+ax.set_ylabel('Y-Axis')
+ax.set_zlabel('Z-Axis')
+set_axes_equal(ax)
+plt.show()
