@@ -32,30 +32,30 @@ def set_axes_equal(ax):
 
 mesh = Mesh(6)
 
-F = np.array([0.1, 0.05, -0.07])
-M = np.array([0.05, -0.1, 0.25])
+F = np.array([1, 1, 1])
+M = np.array([0, 0, 0])
 bf1 = np.append(F, M)
 
-mesh.add_node(0, pos=np.array([0, 0, 10]), bc=np.zeros(6))
-mesh.add_node(1, pos=np.array([15, 0, 10]), bc=np.full(6, np.nan), bf=bf1)
-mesh.add_node(2, pos=np.array([15, 0, 0]), bc=np.array([0, 0, 0, np.nan, np.nan, np.nan]))
+print(bf1)
 
-b = 0.5
-h = 1
-A = b*h
-Iz = h*b**3/12
-Iy = b*h**3/12
-J = 0.02861
+mesh.add_node(0, pos=np.array([0, 0, 0]), bc=np.zeros(6))
+mesh.add_node(1, pos=np.array([0, 0, 20]), bc=np.full(6, np.nan), bf=bf1)
+
+r = 1
+A = np.pi * r**2
+Iz = np.pi * r**2 / 4
+Iy = np.pi * r**2 / 4
+J = Iy + Iz
 E = 1000
 v = 0.3
 
-beam1 = Beam(E=E, A=A, Iy=Iy, Iz=Iz, J=J, v=v, y=np.array([0, 0, 1]))
-beam2 = Beam(E=E, A=A, Iy=Iy, Iz=Iz, J=J, v=v, y=np.array([1, 0, 0]))
+beam1 = Beam(E=E, A=A, Iy=Iy, Iz=Iz, J=J, v=v, y=np.array([0, 1, 0]))
 
 mesh.add_element(beam1, 0, 1)
-mesh.add_element(beam2, 1, 2)
 
 x, f = mesh.solve()
+
+mesh.element_eigenmode_study(Beam.beam_buckling_eigenmatrix)
 
 fig = plt.figure()
 ax = fig.add_subplot(projection='3d')

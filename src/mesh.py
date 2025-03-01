@@ -2,10 +2,15 @@ from networkx import Graph
 from typing import Callable
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy as sp
 
 def unit(v):
     # Adding in a function that should be a default in numpy: getting the unit vector
-    return v/np.linalg.norm(v)
+    L = np.linalg.norm(v)
+    if L == 0:
+        return v
+    else:
+        return v/L
 
 
 
@@ -423,8 +428,8 @@ class Mesh(Graph):
         """
         for (n, node) in self.nodes.data('object'):
             ax.scatter(*node.pos, marker='o', color='k')
-            ax.quiver(*node.pos, *(force_scale*unit(node.bf[0:3])), color='k')
-            ax.quiver(*node.pos, *(force_scale*unit(node.bf[3:6])), linestyle='dashed', color='k')
+            ax.quiver(*node.pos, *(force_scale*unit(node.f_sol[0:3])), color='k')
+            ax.quiver(*node.pos, *(force_scale*unit(node.f_sol[3:6])), linestyle='dashed', color='k')
             ax.text(*node.pos, "Node {n}", color='red')
         
         for (n1, n2, el) in self.edges.data('object'):
@@ -439,5 +444,18 @@ class Mesh(Graph):
             ax.plot(origins_array[:,0], origins_array[:, 1], origins_array[:, 2], 'k--')
             ax.plot(new_shapes[:,0], new_shapes[:,1], new_shapes[:,2], 'k')
             ax.text(*(node1.pos + node2.pos)/2, "El. ({n1}, {n2})", color='green')
-            
+    
+    def element_eigenmode_study(self, eigenmatrix: Callable):
+        """Performs an element-by-element eigenmode study on the mesh:
 
+        A = lambda B d
+        
+        where A and B depend on the matrix.
+        """
+        for (n1, n2, el) in self.edges.data('object'):
+            node1 = self.nodes[n1]['object']
+            node2 = self.nodes[n2]['object']
+            node_tuple = (node1, node2)
+            A, B = eigenmatrix(node_tuple, el)
+            el.eigval, el.eigvec = sp.linalg.eig(A, b=B)
+            pass
