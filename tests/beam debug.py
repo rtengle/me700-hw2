@@ -32,44 +32,50 @@ def set_axes_equal(ax):
 
 mesh = Mesh(6)
 
-F = np.array([-1, 0, 0])
+F = np.array([0, 0, -1])
 M = np.array([0, 0, 0])
-bf1 = np.append(F, M)
+bfb = np.append(F, M)
 
-print(bf1)
+print(bfb)
 
-r = 1
-L = 20
+mesh.add_node(0, pos=np.array([0, 0, 0]), bc=np.zeros(6))
+mesh.add_node(1, pos=np.array([10, 0, 0]), bc=np.zeros(6))
+mesh.add_node(2, pos=np.array([10, 20, 0]), bc=np.zeros(6))
+mesh.add_node(3, pos=np.array([0, 20, 0]), bc=np.zeros(6))
+
+
+mesh.add_node(4, pos=np.array([0, 0, 25]), bc=np.full(6, np.nan), bf=bfb)
+mesh.add_node(5, pos=np.array([10, 0, 25]), bc=np.full(6, np.nan), bf=bfb)
+mesh.add_node(6, pos=np.array([10, 20, 25]), bc=np.full(6, np.nan), bf=bfb)
+mesh.add_node(7, pos=np.array([0, 20, 25]), bc=np.full(6, np.nan), bf=bfb)
+
+r = 0.5
 A = np.pi * r**2
 Iz = np.pi * r**4 / 4
 Iy = np.pi * r**4 / 4
 J = Iy + Iz
-E = 1000
+E = 500
 v = 0.3
 
-mesh.add_node(0, pos=np.array([0, 0, 0]), bc=np.zeros(6))
-mesh.add_node(1, pos=np.array([L, 0, 0]), bc=np.full(6, np.nan), bf=bf1)
+beam = Beam(E=E, A=A, Iy=Iy, Iz=Iz, J=J, v=v, y=np.array([0, 1, 0]))
 
-print(np.pi**2 * E * Iy/(4*L**2))
+mesh.add_element(beam, 0, 4)
+mesh.add_element(beam, 1, 5)
+mesh.add_element(beam, 2, 6)
+mesh.add_element(beam, 3, 7)
 
-beam1 = Beam(E=E, A=A, Iy=Iy, Iz=Iz, J=J, v=v, y=np.array([0, 1, 0]))
-
-mesh.add_element(beam1, 0, 1)
+mesh.add_element(beam, 4, 5)
+mesh.add_element(beam, 5, 6)
+mesh.add_element(beam, 6, 7)
+mesh.add_element(beam, 7, 4)
 
 x, f = mesh.solve()
 
 mesh.element_eigenmode_study(Beam.beam_buckling_eigenmatrix)
 
-a = mesh.edges[0, 1]['object'].eigval
-b = mesh.edges[0, 1]['object'].eigvec
-n = np.argsort(a)
-a = a[n]
-b = b[:,n]
-print(a)
-
 fig = plt.figure()
 ax = fig.add_subplot(projection='3d')
-mesh.plot(ax, disp_scale=1, force_scale=5)
+mesh.plot(ax, force_scale=10)
 ax.set_xlabel('X-Axis')
 ax.set_ylabel('Y-Axis')
 ax.set_zlabel('Z-Axis')
