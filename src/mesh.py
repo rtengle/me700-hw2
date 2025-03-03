@@ -423,8 +423,8 @@ class Mesh(Graph):
             node_disp_pos = node.pos + disp_scale*node.x_sol[0:3]
             ax.scatter(*node.pos, marker='o', color='k')
             ax.scatter(*node_disp_pos, marker='o', color='k')
-            ax.quiver(*node_disp_pos, *(force_scale*unit(node.f_sol[0:3])), color='k')
-            ax.quiver(*node_disp_pos, *(force_scale*unit(node.f_sol[3:6])), linestyle='dashed', color='k')
+            ax.quiver(*node_disp_pos, *(force_scale*node.f_sol[0:3]), color='k')
+            ax.quiver(*node_disp_pos, *(force_scale*node.f_sol[3:6]), linestyle='dashed', color='k')
             ax.text(*node_disp_pos, f"Node {n}", color='red')
         
         for (n1, n2, el) in self.edges.data('object'):
@@ -439,6 +439,16 @@ class Mesh(Graph):
             ax.plot(origins_array[:,0], origins_array[:, 1], origins_array[:, 2], 'k--')
             ax.plot(new_shapes[:,0], new_shapes[:,1], new_shapes[:,2], 'k')
             ax.text(*(node1.pos + node2.pos)/2, f"El. ({n1}, {n2})", color='green')
+
+    def global_eigenmode_study(self, eigenmatrix: Callable):
+        A_total = np.zeros((self.total_dof, self.total_dof))
+        B_total = np.zeros((self.total_dof, self.total_dof))
+        for (n1, n2, el) in self.edges.data('object'):
+            node1 = self.nodes[n1]['object']
+            node2 = self.nodes[n2]['object']
+            node_tuple = (node1, node2)
+            el.A_matrix, el.B_matrix = eigenmatrix(node_tuple, el)
+
     
     def element_eigenmode_study(self, eigenmatrix: Callable):
         """Performs an element-by-element eigenmode study on the mesh:
