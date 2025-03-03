@@ -32,6 +32,12 @@ def set_axes_equal(ax):
 
 mesh = Mesh(6)
 
+F = np.array([-1, 0, 0])
+M = np.array([0, 0, 0])
+bf1 = np.append(F, M)
+
+print(bf1)
+
 r = 1
 L = 20
 A = np.pi * r**2
@@ -41,12 +47,10 @@ J = Iy + Iz
 E = 1000
 v = 0.3
 
-F = np.array([-1, 0, 0])
-M = np.array([0, 0, 0])
-bf1 = np.append(F, M)
-
 mesh.add_node(0, pos=np.array([0, 0, 0]), bc=np.zeros(6))
-mesh.add_node(1, pos=np.array([20, 0, 0]), bc=np.array([np.nan, 0, 0, np.nan, np.nan, np.nan]), bf=bf1)
+mesh.add_node(1, pos=np.array([L, 0, 0]), bc=np.full(6, np.nan), bf=bf1)
+
+print(np.pi**2 * E * Iy/(4*L**2))
 
 beam1 = Beam(E=E, A=A, Iy=Iy, Iz=Iz, J=J, v=v, y=np.array([0, 1, 0]))
 
@@ -54,10 +58,14 @@ mesh.add_element(beam1, 0, 1)
 
 x, f = mesh.solve()
 
-print(x)
-print(f)
-
 mesh.element_eigenmode_study(Beam.beam_buckling_eigenmatrix)
+
+a = mesh.edges[0, 1]['object'].eigval
+b = mesh.edges[0, 1]['object'].eigvec
+n = np.argsort(a)
+a = a[n]
+b = b[:,n]
+print(a)
 
 fig = plt.figure()
 ax = fig.add_subplot(projection='3d')

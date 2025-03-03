@@ -3,14 +3,7 @@ from typing import Callable
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy as sp
-
-def unit(v):
-    # Adding in a function that should be a default in numpy: getting the unit vector
-    L = np.linalg.norm(v)
-    if L == 0:
-        return v
-    else:
-        return v/L
+from random_utils import unit
 
 
 
@@ -427,10 +420,12 @@ class Mesh(Graph):
         - Shape functions are used if enabled (default yes)
         """
         for (n, node) in self.nodes.data('object'):
+            node_disp_pos = node.pos + disp_scale*node.x_sol[0:3]
             ax.scatter(*node.pos, marker='o', color='k')
-            ax.quiver(*node.pos, *(force_scale*unit(node.f_sol[0:3])), color='k')
-            ax.quiver(*node.pos, *(force_scale*unit(node.f_sol[3:6])), linestyle='dashed', color='k')
-            ax.text(*node.pos, f"Node {n}", color='red')
+            ax.scatter(*node_disp_pos, marker='o', color='k')
+            ax.quiver(*node_disp_pos, *(force_scale*unit(node.f_sol[0:3])), color='k')
+            ax.quiver(*node_disp_pos, *(force_scale*unit(node.f_sol[3:6])), linestyle='dashed', color='k')
+            ax.text(*node_disp_pos, f"Node {n}", color='red')
         
         for (n1, n2, el) in self.edges.data('object'):
             xi_list = np.linspace(0, 1, xi_steps)
@@ -455,7 +450,11 @@ class Mesh(Graph):
         for (n1, n2, el) in self.edges.data('object'):
             node1 = self.nodes[n1]['object']
             node2 = self.nodes[n2]['object']
+            n_free = np.argwhere(np.isnan(np.append(node1.bc, node2.bc)))[:, 0]
             node_tuple = (node1, node2)
             el.A_matrix, el.B_matrix = eigenmatrix(node_tuple, el)
-            el.eigval, el.eigvec = sp.linalg.eig(el.A_matrix, b=el.B_matrix)
+            el.eigval, el.eigvec = sp.linalg.eig(
+                el.A_matrix[n_free, :][:, n_free], 
+                b=el.B_matrix[n_free, :][:, n_free]
+            )
             pass
