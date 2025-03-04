@@ -102,7 +102,7 @@ class Beam(Element):
         L = np.linalg.norm(node2.pos - node1.pos)
         K = el.beam_stiffness(nodes)
         G = el.beam_transform(el.rotation)
-        f = G.T @ np.append(node1.f_sol, node2.f_sol)
+        f = G.T @ el.internal_forces
 
         My1 = f[4]
         Mz1 = f[5]

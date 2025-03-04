@@ -32,46 +32,32 @@ def set_axes_equal(ax):
 
 mesh = Mesh(6)
 
-F = np.array([0, 0, -1])
+F = np.array([-1, 0, 0])
 M = np.array([0, 0, 0])
 bfb = np.append(F, M)
 
 print(bfb)
 
 mesh.add_node(0, pos=np.array([0, 0, 0]), bc=np.zeros(6))
-mesh.add_node(1, pos=np.array([10, 0, 0]), bc=np.zeros(6))
-mesh.add_node(2, pos=np.array([10, 20, 0]), bc=np.zeros(6))
-mesh.add_node(3, pos=np.array([0, 20, 0]), bc=np.zeros(6))
+mesh.add_node(1, pos=np.array([10, 0, 0]), bc=np.full(6, np.nan))
+mesh.add_node(2, pos=np.array([20, 0, 0]), bc=np.full(6, np.nan), bf=bfb)
 
-
-mesh.add_node(4, pos=np.array([0, 0, 25]), bc=np.full(6, np.nan), bf=bfb)
-mesh.add_node(5, pos=np.array([10, 0, 25]), bc=np.full(6, np.nan), bf=bfb)
-mesh.add_node(6, pos=np.array([10, 20, 25]), bc=np.full(6, np.nan), bf=bfb)
-mesh.add_node(7, pos=np.array([0, 20, 25]), bc=np.full(6, np.nan), bf=bfb)
-
-r = 0.5
+r = 1
 A = np.pi * r**2
 Iz = np.pi * r**4 / 4
 Iy = np.pi * r**4 / 4
 J = Iy + Iz
-E = 500
+E = 1000
 v = 0.3
 
 beam = Beam(E=E, A=A, Iy=Iy, Iz=Iz, J=J, v=v, y=np.array([0, 1, 0]))
 
-mesh.add_element(beam, 0, 4)
-mesh.add_element(beam, 1, 5)
-mesh.add_element(beam, 2, 6)
-mesh.add_element(beam, 3, 7)
-
-mesh.add_element(beam, 4, 5)
-mesh.add_element(beam, 5, 6)
-mesh.add_element(beam, 6, 7)
-mesh.add_element(beam, 7, 4)
+mesh.add_element(beam, 0, 1)
+mesh.add_element(beam, 1, 2)
 
 x, f = mesh.solve()
 
-mesh.element_eigenmode_study(Beam.beam_buckling_eigenmatrix)
+mesh.global_eigenmode_study(Beam.beam_buckling_eigenmatrix)
 
 fig = plt.figure()
 ax = fig.add_subplot(projection='3d')

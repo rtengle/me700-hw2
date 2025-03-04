@@ -391,11 +391,18 @@ class Mesh(Graph):
         self.f_total = self.shuffle_matrix.T @ self.f_shuffle
 
     def assign_solution(self):
-        """Assigns the solved forces and displacements to their respective nodes"""
+        """Assigns the solved forces and displacements to their respective nodes
+        Also adds internal forces to elements
+        """
         for (n, node) in self.nodes.data('object'):
             x = self.x_total[n*self.node_dof:(n+1)*self.node_dof]
             f = self.f_total[n*self.node_dof:(n+1)*self.node_dof]
             node.set_solution(x, f)
+
+        for (n1, n2, el) in self.edges.data('object'):
+            node1 = self.nodes[n1]['object']
+            node2 = self.nodes[n2]['object']
+            el.internal_forces = el.global_stiffness_matrix @ np.append(node1.x_sol, node2.x_sol)
 
     def solve(self):
         """Solves the system after defining"""
@@ -441,13 +448,35 @@ class Mesh(Graph):
             ax.text(*(node1.pos + node2.pos)/2, f"El. ({n1}, {n2})", color='green')
 
     def global_eigenmode_study(self, eigenmatrix: Callable):
-        A_total = np.zeros((self.total_dof, self.total_dof))
-        B_total = np.zeros((self.total_dof, self.total_dof))
+        self.A_total = np.zeros((self.total_dof, self.total_dof))
+        self.B_total = np.zeros((self.total_dof, self.total_dof))
         for (n1, n2, el) in self.edges.data('object'):
             node1 = self.nodes[n1]['object']
             node2 = self.nodes[n2]['object']
             node_tuple = (node1, node2)
-            el.A_matrix, el.B_matrix = eigenmatrix(node_tuple, el)
+            A, B = eigenmatrix(node_tuple, el)
+            
+            n1_slice = slice(self.node_dof*n1, self.node_dof*(n1+1))
+            n2_slice = slice(self.node_dof*n2, self.node_dof*(n2+1))
+            
+            self.A_total[n1_slice, n1_slice] += A[0:self.node_dof, 0:self.node_dof]
+            self.A_total[n1_slice, n2_slice] += A[0:self.node_dof, self.node_dof:2*self.node_dof]
+            self.A_total[n2_slice, n1_slice] += A[self.node_dof:2*self.node_dof, 0:self.node_dof]
+            self.A_total[n2_slice, n2_slice] += A[self.node_dof:2*self.node_dof, self.node_dof:2*self.node_dof]
+            
+            self.B_total[n1_slice, n1_slice] += B[0:self.node_dof, 0:self.node_dof]
+            self.B_total[n1_slice, n2_slice] += B[0:self.node_dof, self.node_dof:2*self.node_dof]
+            self.B_total[n2_slice, n1_slice] += B[self.node_dof:2*self.node_dof, 0:self.node_dof]
+            self.B_total[n2_slice, n2_slice] += B[self.node_dof:2*self.node_dof, self.node_dof:2*self.node_dof]
+        
+        A_shuffle = self.shuffle_matrix @ self.A_total @ self.shuffle_matrix.T
+        B_shuffle = self.shuffle_matrix @ self.B_total @ self.shuffle_matrix.T
+        sep_index = np.where(np.isnan(self.bc_shuffle))[0][0]
+        Aff = A_shuffle[sep_index:self.total_dof,sep_index:self.total_dof]
+        Bff = B_shuffle[sep_index:self.total_dof,sep_index:self.total_dof]
+        self.eigval, vec = sp.linalg.eig(Aff, b=Bff)
+        self.eigvec = self.shuffle_matrix.T @ vec
+
 
     
     def element_eigenmode_study(self, eigenmatrix: Callable):
