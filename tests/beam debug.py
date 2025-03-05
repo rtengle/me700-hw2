@@ -57,11 +57,19 @@ mesh.add_element(beam, 1, 2)
 
 x, f = mesh.solve()
 
-mesh.global_eigenmode_study(Beam.beam_buckling_eigenmatrix)
+val, vec = mesh.global_eigenmode_study(Beam.beam_buckling_eigenmatrix)
 
 fig = plt.figure()
 ax = fig.add_subplot(projection='3d')
 mesh.plot(ax, force_scale=10)
+ax.set_xlabel('X-Axis')
+ax.set_ylabel('Y-Axis')
+ax.set_zlabel('Z-Axis')
+set_axes_equal(ax)
+
+fig = plt.figure()
+ax = fig.add_subplot(projection='3d')
+mesh.plot_displacement(ax, vec[:, 0], disp_scale=5, force_scale=10)
 ax.set_xlabel('X-Axis')
 ax.set_ylabel('Y-Axis')
 ax.set_zlabel('Z-Axis')

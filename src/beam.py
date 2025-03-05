@@ -4,7 +4,7 @@ import numpy as np
 class Beam(Element):
     """Beam class that extends from the element class."""
 
-    def beam_stiffness(self, nodes: Node):
+    def beam_stiffness(self, nodes: Node, disp=None):
         node1, node2 = nodes
         L = np.linalg.norm(node2.pos - node1.pos)
         K = np.zeros((12, 12))
@@ -54,13 +54,14 @@ class Beam(Element):
         G[9:12, 9:12] = g
         return G
 
-    def beam_shape(self, nodes, steps):
+    def beam_shape(self, nodes, steps, disp=None):
         # Gets nodes
         # Gets L and position of node 1
         # Gets polynomial coefficients for shape function
         node1, node2 = nodes
         L = np.linalg.norm(node2.pos - node1.pos)
-        disp = self.beam_transform(self.rotation).T @ np.append(node1.x_sol, node2.x_sol)
+        if type(disp) == type(None):
+            disp = self.beam_transform(self.rotation).T @ np.append(node1.x_sol, node2.x_sol)
         ushape_matrix = np.zeros((4, 12))
         vshape_matrix = np.zeros((4,12))
         wshape_matrix = np.zeros((4,12))
@@ -199,6 +200,6 @@ class Beam(Element):
         self.v = v
 
         update_stiffness = lambda nodes: self.beam_stiffness(nodes)
-        shape = lambda nodes, steps: self.beam_shape(nodes, steps=steps)
+        shape = lambda nodes, steps, disp=None: self.beam_shape(nodes, steps=steps, disp=disp)
         super().__init__(update_stiffness, 6, self.beam_transform, y, shape)
 

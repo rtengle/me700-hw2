@@ -447,6 +447,30 @@ class Mesh(Graph):
             ax.plot(new_shapes[:,0], new_shapes[:,1], new_shapes[:,2], 'k')
             ax.text(*(node1.pos + node2.pos)/2, f"El. ({n1}, {n2})", color='green')
 
+    def plot_displacement(self, ax, disp, disp_scale=1, force_scale=1, xi_steps = 50):
+        for (n, node) in self.nodes.data('object'):
+            node_disp_pos = node.pos + disp_scale*disp[n*self.node_dof:n*self.node_dof+3]
+            ax.scatter(*node.pos, marker='o', color='k')
+            ax.scatter(*node_disp_pos, marker='o', color='k')
+            ax.quiver(*node_disp_pos, *(force_scale*node.f_sol[0:3]), color='k')
+            ax.quiver(*node_disp_pos, *(force_scale*node.f_sol[3:6]), linestyle='dashed', color='k')
+            ax.text(*node_disp_pos, f"Node {n}", color='red')
+
+        for (n1, n2, el) in self.edges.data('object'):
+            xi_list = np.linspace(0, 1, xi_steps)
+            node1 = self.nodes[n1]['object']
+            node2 = self.nodes[n2]['object']
+            node_tuple = (node1, node2)
+            disp1 = disp[n1*self.node_dof:n1*self.node_dof+6]
+            disp2 = disp[n2*self.node_dof:n2*self.node_dof+6]
+            displacements = el.shape_function(node_tuple, xi_list, disp=np.append(disp1, disp2))
+            origins = [node1.pos*(1-xi) + node2.pos*xi for xi in xi_list]
+            new_shapes = np.array([x + (u*disp_scale) for x, u in zip(origins, displacements)])
+            origins_array = np.array(origins)
+            ax.plot(origins_array[:,0], origins_array[:, 1], origins_array[:, 2], 'k--')
+            ax.plot(new_shapes[:,0], new_shapes[:,1], new_shapes[:,2], 'k')
+            ax.text(*(node1.pos + node2.pos)/2, f"El. ({n1}, {n2})", color='green')
+
     def global_eigenmode_study(self, eigenmatrix: Callable):
         self.A_total = np.zeros((self.total_dof, self.total_dof))
         self.B_total = np.zeros((self.total_dof, self.total_dof))
@@ -475,7 +499,17 @@ class Mesh(Graph):
         Aff = A_shuffle[sep_index:self.total_dof,sep_index:self.total_dof]
         Bff = B_shuffle[sep_index:self.total_dof,sep_index:self.total_dof]
         self.eigval, vec = sp.linalg.eig(Aff, b=Bff)
-        self.eigvec = self.shuffle_matrix.T @ vec
+        n_sorted = np.argsort(self.eigval)
+        self.eigval = self.eigval[n_sorted]
+        vec = vec[:, n_sorted]
+
+        self.eigvec = np.zeros((self.total_dof, self.total_dof))
+
+        for i in range(self.total_dof-sep_index):
+            self.eigvec[sep_index:self.total_dof, i] = vec[:, i]
+            self.eigvec[:, i] = self.shuffle_matrix.T @ self.eigvec[:, i]
+        
+        return self.eigval, self.eigvec
 
 
     
