@@ -398,7 +398,11 @@ class Mesh(DiGraph):
     def _solve_shuffle(self):
         """Solves the shuffled system of equations"""
         # Find out when nan ends
-        sep_index = np.where(np.isnan(self.bc_shuffle))[0][0] # approaches backwards
+        nanarray = np.where(np.isnan(self.bc_shuffle))[0]
+        if len(nanarray) == 0:
+            sep_index = 2*self.node_dof
+        else:
+            sep_index = np.where(np.isnan(self.bc_shuffle))[0][0] # approaches backwards
 
         # Break down system into two subequations
         forces_ef = self.shuffled_forces[sep_index:self.total_dof]
@@ -497,9 +501,9 @@ class Mesh(DiGraph):
             node_tuple = (node1, node2)
             # Calculates the displacements and original line
             displacements = el.shape_function(node_tuple, xi_list)
-            origins = [node1.pos*(1-xi) + node2.pos*xi for xi in xi_list]
+            origins = np.array([node1.pos*(1-xi) + node2.pos*xi for xi in xi_list])
             # Calculates the deformed shape & the average position
-            new_shapes = np.array([x + (u*disp_scale) for x, u in zip(origins, displacements)])
+            new_shapes = origins + disp_scale*displacements
             deformed_pos = np.array([np.average(new_shapes[:, i]) for i in range(3)])
             origins_array = np.array(origins)
             # Plots the deformed shape
@@ -551,8 +555,8 @@ class Mesh(DiGraph):
             disp2 = disp[n2*self.node_dof:n2*self.node_dof+6]
             # Calculates the deformed shape
             displacements = el.shape_function(node_tuple, xi_list, disp=np.append(disp1, disp2))
-            origins = [node1.pos*(1-xi) + node2.pos*xi for xi in xi_list]
-            new_shapes = np.array([x + (u*disp_scale) for x, u in zip(origins, displacements)])
+            origins = np.array([node1.pos*(1-xi) + node2.pos*xi for xi in xi_list])
+            new_shapes = origins + disp_scale*displacements
             deformed_pos = np.array([np.average(new_shapes[:, i]) for i in range(3)])
             origins_array = np.array(origins)
             # Plots the deformed shape

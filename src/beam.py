@@ -131,10 +131,10 @@ class Beam(Element):
         uvwshape_coeff = np.append(np.array([ushape_coeff]), vwshape_coeff, axis=0)
 
         # Returns an array of the shape functions
-        return [
+        return np.array([
             self.rotation @ uvwshape_coeff @ np.array([1, xi, xi**2, xi**3])
             for xi in steps
-        ]
+        ])
 
     @staticmethod
     def beam_buckling_eigenmatrix(nodes: tuple, el: Element):
