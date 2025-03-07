@@ -1,12 +1,3 @@
----
-title: "Title"
-author: "Me"
-header-includes:
-   - \usepackage{tikz-cd}
-output:
-    pdf_document
----
-
 [![python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
 ![os](https://img.shields.io/badge/os-ubuntu%20|%20macos%20|%20windows-blue.svg)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/sandialabs/sibl#license)
