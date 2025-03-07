@@ -2,9 +2,23 @@ from mesh import Element, Node
 import numpy as np
 
 class Beam(Element):
-    """Beam class that extends from the element class."""
+    """Beam class that extends from the element class. This class specifically represends a slender beam
+    obeying Euler-Bernoulli beam theory.
+    """
 
-    def beam_stiffness(self, nodes: Node, disp=None):
+    def beam_stiffness(self, nodes: tuple):
+        """Returns the elastic stiffness matrix for the beam.
+        
+        Attributes
+        ----------
+        nodes : tuple
+            Tuple of node objects in the form (node1, node2).
+
+        Returns
+        -------
+        Ke : ndarray
+            Elastic stiffness matrix for the element in local coordinates. 
+        """
         node1, node2 = nodes
         L = np.linalg.norm(node2.pos - node1.pos)
         K = np.zeros((12, 12))
@@ -46,7 +60,21 @@ class Beam(Element):
         K[6:12, 0:6] = K21 # bottom left
         return self.E*K
     
-    def beam_transform(self, g):
+    def beam_transform(self, g:np.ndarray):
+        """Returns the global transformation matrix of the element using a local transformation matrix g.
+        This isn't general because not all DoFs transform with rotation (ex: Temperature).
+
+        Attributes
+        ----------
+        g : ndarray
+            3D Rotation Matrix describing a transformation from global coordinates to local coordinates.
+
+        Returns
+        -------
+        G : ndarray
+            Rotation Matrix describing a transformation from the DoFs in the global reference frame to
+            the DoFs in the local reference frame.
+        """
         G = np.zeros((12, 12))
         G[0:3, 0:3] = g
         G[3:6, 3:6] = g
@@ -55,6 +83,7 @@ class Beam(Element):
         return G
 
     def beam_shape(self, nodes, steps, disp=None):
+        """Returns the shape function as parameterized by steps"""
         # Gets nodes
         # Gets L and position of node 1
         # Gets polynomial coefficients for shape function
@@ -62,9 +91,16 @@ class Beam(Element):
         L = np.linalg.norm(node2.pos - node1.pos)
         if type(disp) == type(None):
             disp = self.beam_transform(self.rotation).T @ np.append(node1.x_sol, node2.x_sol)
-        ushape_matrix = np.zeros((4, 12))
+        else:
+            disp = self.beam_transform(self.rotation).T @ disp
+        # For some reason I thought it would be a good idea to turns the shape functions into matrix multiplication
+        # I don't exactly remember why, maybe I thought it would be cleaner but I'm sure sure if it is. Oh well.
+        
+        # Initializes shape matrices
+        ushape_matrix = np.zeros((4,12))
         vshape_matrix = np.zeros((4,12))
         wshape_matrix = np.zeros((4,12))
+        # Assigns shape matrices of isolated effects
         axial_shape_matrix = np.array([
             [1, 0],
             [-1, 1],
@@ -83,22 +119,41 @@ class Beam(Element):
             [-3, 2*L, 3, L],
             [2, -L, -2, -L]
         ])
+        # Gets the coefficients along each axis
         ushape_matrix[:, [0, 6]] = axial_shape_matrix
         ushape_coeff = ushape_matrix @ disp
         vshape_matrix[:,[1, 5, 7, 11]] = vbending_shape_matrix
         vshape_coeff = vshape_matrix @ disp
         wshape_matrix[:,[2, 4, 8, 10]] = wbending_shape_matrix
         wshape_coeff = wshape_matrix @ disp
+        # Assembles coefficients into a matrix.
         vwshape_coeff = np.append(np.array([vshape_coeff]), np.array([wshape_coeff]), axis=0)
         uvwshape_coeff = np.append(np.array([ushape_coeff]), vwshape_coeff, axis=0)
 
+        # Returns an array of the shape functions
         return [
             self.rotation @ uvwshape_coeff @ np.array([1, xi, xi**2, xi**3])
             for xi in steps
         ]
 
     @staticmethod
-    def beam_buckling_eigenmatrix(nodes, el: Element):
+    def beam_buckling_eigenmatrix(nodes: tuple, el: Element):
+        """Eigenmatrix for beam buckling.
+        
+        Attributes
+        ----------
+        nodes : tuple
+            Tuple of the nodes associated with the element el.
+        el : Element
+            Element to get the matrices for. Should be Beam but I can't define an input as the class it's in.
+
+        Returns
+        -------
+        A : ndarray
+            Elastic stiffness matrix 
+        B : ndarray
+            Geometric stiffness matrix
+        """
         node1, node2 = nodes
         L = np.linalg.norm(node2.pos - node1.pos)
         K = el.beam_stiffness(nodes)

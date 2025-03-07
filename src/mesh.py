@@ -1,7 +1,8 @@
-from networkx import Graph
+from networkx import DiGraph
 from typing import Callable
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
 import scipy as sp
 from random_utils import unit
 
@@ -258,28 +259,56 @@ class Element():
 
 
 
-class Mesh(Graph):
+class Mesh(DiGraph):
     #TODO: Finish up docstrings and comments apart from basic functionality
     """Class of a mesh containing nodes connected by elements. These elements act as subdomains of the system while the nodes act as subboundaries.
     These are connected through linear relationships of the form f = Kx with a set of prescribed f and x.
     """
-    def __init__(self, dof):
+    def __init__(self, dof:int):
+        """Class of a mesh describing a set of elements connected by nodes.
+
+        Attributes
+        ----------
+        dof : int
+            Number of degrees of freedom (DoFs) per node.
+        """
         self.node_dof = dof
         super().__init__()
 
-    def add_node(self, id: int, pos: np.ndarray, bc=None, bf=None):
+    def add_node(self, id: int, pos: np.ndarray, bc:type[None | np.ndarray]=None, bf:type[None | np.ndarray]=None):
         """Adds a node with an integer identifier, a position vector, a set of boundary conditions, and set of forces
+
+        Attributes
+        ----------
+        id : int
+            Index of node. Should be from 0 up with no gaps.
+        pos : ndarray
+            3D vector describing the position of the node.
+        bc : None, ndarray, default : None
+            1D array containing the boundary conditions for the node. Any prescribed DoF is stated in the array.
+            Free DoFs are listed as np.nan. If bc is None, then all DoFs are free.
+        bf : None, ndarray, default : None
+            1D array containing the applied forces on the node. If None, then no forces are applied.
         """
         if type(bc) != np.ndarray and bc == None:
             bc = self.dof
         super().add_node(node_for_adding=id, object=Node(pos=pos, bc=bc, bf=bf))
 
-    def add_element(self, element: Element, n1, n2):
-        """Adds an element connected by two nodes. Direction is n1 --> n2
+    def add_element(self, element: Element, n1: int, n2: int):
+        """Adds an element connected by two nodes. Direction is n1 --> n2.
+
+        Attributes
+        ----------
+        element : Element
+            Element object to be added. Must be compatible with the specified node DoF
+        n1 : int
+            Beginning node of the element
+        n2 : int
+            End node of the element
         """
         super().add_edge(n1, n2, object=element)
 
-    def add_stiffness(self, K_local, n1, n2):
+    def _add_stiffness(self, K_local, n1, n2):
         """Adds the local stiffness matrix (in the global coordinates) of element connected by node indicies n1 and n2 
         to the total global stiffness matrix.
         """
@@ -292,7 +321,7 @@ class Mesh(Graph):
         self.K_total[n2_slice, n1_slice] += K_local[self.node_dof:2*self.node_dof, 0:self.node_dof]
         self.K_total[n2_slice, n2_slice] += K_local[self.node_dof:2*self.node_dof, self.node_dof:2*self.node_dof]
 
-    def iterate_elements(self, states:type[dict | None] = None):
+    def _iterate_elements(self, states:type[dict | None] = None):
         """Iterates over the elements of the mesh, updates their key values, and adds their contributions to 
         the total stiffness matrix and connected nodes. 
 
@@ -314,23 +343,23 @@ class Mesh(Graph):
                 K_local, (fb1, fb2) = el.global_coords(node_tuple, states)
             self.nodes[n1]['object'].add_bf(fb1)
             self.nodes[n2]['object'].add_bf(fb2)
-            self.add_stiffness(K_local, n1, n2)
+            self._add_stiffness(K_local, n1, n2)
 
-    def add_forces(self, i, node: Node):
+    def _add_forces(self, i, node: Node):
         """Adds forces on a node with index i to the total global external forces vector"""
         self.external_forces[i*self.node_dof:(i+1)*self.node_dof] += node.bf
 
-    def set_boundary_conditions(self, i, node: Node):
+    def _set_boundary_conditions(self, i, node: Node):
         """Specifies the boundary conditions of a given node in the total boundary condition vector"""
         self.total_bc[self.node_dof*i:(i+1)*self.node_dof] = node.bc
 
-    def iterate_nodes(self):
+    def _iterate_nodes(self):
         """Iterates of the nodes to add force and boundary conditions to the total vectors"""
         for (i, node) in self.nodes.data('object'):
-            self.add_forces(i, node)
-            self.set_boundary_conditions(i, node)
+            self._add_forces(i, node)
+            self._set_boundary_conditions(i, node)
 
-    def get_shuffle_matrix(self):
+    def _get_shuffle_matrix(self):
         """Gets the shuffle matrix describing how the system is shuffled around to separate free DoFs from fixed DoFs"""
         # Sort the boundary conditions in the form [float, ..., nan, ...] and returns the indexing that does this shuffling.
         # In this form, the fixed DoFs are given first and the free DoFs are given last
@@ -343,17 +372,16 @@ class Mesh(Graph):
         # Gets the shuffled boundary conditions
         self.bc_shuffle = self.total_bc[bc_sorted]
 
-    def shuffle_system(self):
+    def _shuffle_system(self):
         """Shuffles the system so that the free DoFs are on the top and fixed DoFs are on the bottom"""
         # Gets the matrix describing how the system is shuffled. These are a special class of rotation matrices
-        self.get_shuffle_matrix()
+        self._get_shuffle_matrix()
         # Shuffles the K matrix to the new set of systems.
         self.K_shuffle = self.shuffle_matrix @ self.K_total @ self.shuffle_matrix.T
         # Shuffles the forces
-        self.shuffled_forces = self.shuffle_matrix @ self.external_forces
-        
+        self.shuffled_forces = self.shuffle_matrix @ self.external_forces     
 
-    def assemble_global(self):
+    def _assemble_global(self):
         """Assembles the total global stiffness matrix for the full mesh system"""
         # Iterate through edges, update them, grab their stiffness matrices, and sum them
 
@@ -364,10 +392,10 @@ class Mesh(Graph):
         self.total_bc = np.full(self.total_dof, np.nan)
 
         # Iteration methods
-        self.iterate_elements()
-        self.iterate_nodes()
+        self._iterate_elements()
+        self._iterate_nodes()
 
-    def solve_shuffle(self):
+    def _solve_shuffle(self):
         """Solves the shuffled system of equations"""
         # Find out when nan ends
         sep_index = np.where(np.isnan(self.bc_shuffle))[0][0] # approaches backwards
@@ -385,12 +413,12 @@ class Mesh(Graph):
         self.x_shuffle = np.append(xd, xf)
         self.f_shuffle = self.K_shuffle @ self.x_shuffle - self.shuffled_forces
 
-    def unshuffle_solution(self):
+    def _unshuffle_solution(self):
         """Undoes the shuffled solution"""
         self.x_total = self.shuffle_matrix.T @ self.x_shuffle
         self.f_total = self.shuffle_matrix.T @ self.f_shuffle
 
-    def assign_solution(self):
+    def _assign_solution(self):
         """Assigns the solved forces and displacements to their respective nodes
         Also adds internal forces to elements
         """
@@ -405,129 +433,216 @@ class Mesh(Graph):
             el.internal_forces = el.global_stiffness_matrix @ np.append(node1.x_sol, node2.x_sol)
 
     def solve(self):
-        """Solves the system after defining"""
+        """Solves the system in the mesh:
+
+        fr + fb = K x
+
+        Using the specified elements, nodes, and boundary conditions.
+
+        Returns
+        -------
+        self.x_total : ndarray
+            Solved displacement array
+        self.f_total : ndarray
+            Solved reaction array
+        """
         # Assembles global matrix
-        self.assemble_global()
+        self._assemble_global()
         # Shuffles the system
-        self.shuffle_system()
+        self._shuffle_system()
         # Solves the system
-        self.solve_shuffle()
+        self._solve_shuffle()
         # Unshuffles the system
-        self.unshuffle_solution()
+        self._unshuffle_solution()
         # Assigns the solved forces and displacements to the nodes
-        self.assign_solution()
+        self._assign_solution()
         
         return self.x_total, self.f_total
     
-    def plot(self, ax, disp_scale=1, force_scale=1, node_format = 'b', element_format = 'b', shape=True, xi_steps = 50):
-        """Plots the entire mesh using the shape functions. General plotting format:
-        
-        - Nodes are points
-        - Elements are lines w/ their normalized orientation vector at the center
-        - Shape functions are used if enabled (default yes)
+    def plot(self, ax: Axes, disp_scale:float=1, force_scale:float=1, plot_labels:bool=False, xi_steps:int = 50):
+        """Plots the entire mesh using the shape functions. Plots both the original shape and deformed shape.
+
+        Attributes
+        ----------
+        ax : Axes
+            Axis to plot on
+        disp_scale : float
+            Multiplicative factor to displacements. Used to exaggerate effects.
+        force_scale : float
+            Multiplicative factor to forces. Used to exaggerate effects.
+        plot_labels : bool, default : true
+            True/False whether to plot labels
         """
+        # Node loop
         for (n, node) in self.nodes.data('object'):
+            # Gets the displaced node position
             node_disp_pos = node.pos + disp_scale*node.x_sol[0:3]
+            # Plots the original and displaced position
             ax.scatter(*node.pos, marker='o', color='k')
             ax.scatter(*node_disp_pos, marker='o', color='k')
+            # Plots any forces on the node
             ax.quiver(*node_disp_pos, *(force_scale*node.f_sol[0:3]), color='k')
             ax.quiver(*node_disp_pos, *(force_scale*node.f_sol[3:6]), linestyle='dashed', color='k')
-            ax.text(*node_disp_pos, f"Node {n}", color='red')
+            # Adds label
+            if plot_labels:
+                ax.text(*node_disp_pos, f"N{n}", color='#1A85FF')
         
+        # Element loop
         for (n1, n2, el) in self.edges.data('object'):
+            # List used for plotting shape function
             xi_list = np.linspace(0, 1, xi_steps)
+            # Gets the nodes for the element
             node1 = self.nodes[n1]['object']
             node2 = self.nodes[n2]['object']
             node_tuple = (node1, node2)
+            # Calculates the displacements and original line
             displacements = el.shape_function(node_tuple, xi_list)
             origins = [node1.pos*(1-xi) + node2.pos*xi for xi in xi_list]
+            # Calculates the deformed shape & the average position
             new_shapes = np.array([x + (u*disp_scale) for x, u in zip(origins, displacements)])
+            deformed_pos = np.array([np.average(new_shapes[:, i]) for i in range(3)])
             origins_array = np.array(origins)
+            # Plots the deformed shape
             ax.plot(origins_array[:,0], origins_array[:, 1], origins_array[:, 2], 'k--')
             ax.plot(new_shapes[:,0], new_shapes[:,1], new_shapes[:,2], 'k')
-            ax.text(*(node1.pos + node2.pos)/2, f"El. ({n1}, {n2})", color='green')
+            # Adds label
+            if plot_labels:
+                ax.text(*(deformed_pos), f"E({n1}, {n2})", color='#D41159')
 
-    def plot_displacement(self, ax, disp, disp_scale=1, force_scale=1, xi_steps = 50):
+    def plot_displacement(self, ax: Axes, disp: np.ndarray, disp_scale=1, force_scale=1, xi_steps = 50, plot_labels:bool=True):
+        """Same as plot but for a set of given global displacements.
+        
+        Attributes
+        ----------
+        ax : Axes
+            Axis to plot on
+        disp : ndarray
+            Global displacement vector to plot
+        disp_scale : float
+            Multiplicative factor to displacements. Used to exaggerate effects.
+        force_scale : float
+            Multiplicative factor to forces. Used to exaggerate effects.
+        plot_labels : bool, default : true
+            True/False whether to plot labels"""
+        # Node loop
         for (n, node) in self.nodes.data('object'):
+            # Node displacement
             node_disp_pos = node.pos + disp_scale*disp[n*self.node_dof:n*self.node_dof+3]
+            # Plot original & deformed nodes
             ax.scatter(*node.pos, marker='o', color='k')
             ax.scatter(*node_disp_pos, marker='o', color='k')
+            # Plots forces at deformed nodes
             ax.quiver(*node_disp_pos, *(force_scale*node.f_sol[0:3]), color='k')
             ax.quiver(*node_disp_pos, *(force_scale*node.f_sol[3:6]), linestyle='dashed', color='k')
-            ax.text(*node_disp_pos, f"Node {n}", color='red')
+            # Adds labels
+            if plot_labels:
+                ax.text(*node_disp_pos, f"N{n}", color='#1A85FF')
 
+        # Element loop
         for (n1, n2, el) in self.edges.data('object'):
+            # Parameter used to plot deformed element shape
             xi_list = np.linspace(0, 1, xi_steps)
+            # Gets nodes
             node1 = self.nodes[n1]['object']
             node2 = self.nodes[n2]['object']
             node_tuple = (node1, node2)
+            # Gets the displacements from the input
             disp1 = disp[n1*self.node_dof:n1*self.node_dof+6]
             disp2 = disp[n2*self.node_dof:n2*self.node_dof+6]
+            # Calculates the deformed shape
             displacements = el.shape_function(node_tuple, xi_list, disp=np.append(disp1, disp2))
             origins = [node1.pos*(1-xi) + node2.pos*xi for xi in xi_list]
             new_shapes = np.array([x + (u*disp_scale) for x, u in zip(origins, displacements)])
+            deformed_pos = np.array([np.average(new_shapes[:, i]) for i in range(3)])
             origins_array = np.array(origins)
+            # Plots the deformed shape
             ax.plot(origins_array[:,0], origins_array[:, 1], origins_array[:, 2], 'k--')
             ax.plot(new_shapes[:,0], new_shapes[:,1], new_shapes[:,2], 'k')
-            ax.text(*(node1.pos + node2.pos)/2, f"El. ({n1}, {n2})", color='green')
+            # Adds the labels
+            if plot_labels:
+                ax.text(*(deformed_pos), f"E({n1}, {n2})", color='#D41159')
 
     def global_eigenmode_study(self, eigenmatrix: Callable):
+        """This is a global eigenmode study. This defined any study where the goal is to find the global
+        eigenvalues and eigenvectors of the system in the following form:
+
+        A d = l B d
+
+        Where d is the eigenvector and l is the eigenvalue. The global matrices are constructed from the 
+        elements via a linear summation:
+
+        A = A_0 + A_1 + ...
+        B = B_0 + B_1 + ...
+        
+        The value of the matrices are determined by the eigenmatrix function passed into the study.
+
+        Attributes
+        ----------
+        eigenmatrix : Callable
+            Function that returns the local A and B matrix for a given element. Used to construct the
+            generalized eigenvalue problem.
+
+        Returns
+        -------
+        self.eigval : ndarray
+            Array of eigenvalues from least to greatest. Also stored in the object
+        self.eigvec : ndarray
+            Array of eigenvectors corresponding to the eigenvalues. Eigenvector n is self.eigvec[:,n]
+        """
+        # Initializes the global matrix
         self.A_total = np.zeros((self.total_dof, self.total_dof))
         self.B_total = np.zeros((self.total_dof, self.total_dof))
+        # Iterates through elements
         for (n1, n2, el) in self.edges.data('object'):
+            # Gets the nodes for the element
             node1 = self.nodes[n1]['object']
             node2 = self.nodes[n2]['object']
             node_tuple = (node1, node2)
+            # Calculates the A and B matrix for the element
             A, B = eigenmatrix(node_tuple, el)
             
+            # Assembly. This should be its own function probably. If I need to use this code in the future
+            # I'll do that. 
+            # TODO: Put local --> global expansion into a separate function.
+
+            # Gets the slices for each node
             n1_slice = slice(self.node_dof*n1, self.node_dof*(n1+1))
             n2_slice = slice(self.node_dof*n2, self.node_dof*(n2+1))
             
+            # Adds A contributions
             self.A_total[n1_slice, n1_slice] += A[0:self.node_dof, 0:self.node_dof]
             self.A_total[n1_slice, n2_slice] += A[0:self.node_dof, self.node_dof:2*self.node_dof]
             self.A_total[n2_slice, n1_slice] += A[self.node_dof:2*self.node_dof, 0:self.node_dof]
             self.A_total[n2_slice, n2_slice] += A[self.node_dof:2*self.node_dof, self.node_dof:2*self.node_dof]
             
+            # Adds B contributions
             self.B_total[n1_slice, n1_slice] += B[0:self.node_dof, 0:self.node_dof]
             self.B_total[n1_slice, n2_slice] += B[0:self.node_dof, self.node_dof:2*self.node_dof]
             self.B_total[n2_slice, n1_slice] += B[self.node_dof:2*self.node_dof, 0:self.node_dof]
             self.B_total[n2_slice, n2_slice] += B[self.node_dof:2*self.node_dof, self.node_dof:2*self.node_dof]
         
+        # Shuffles the matrices to apply boundary conditions
         A_shuffle = self.shuffle_matrix @ self.A_total @ self.shuffle_matrix.T
         B_shuffle = self.shuffle_matrix @ self.B_total @ self.shuffle_matrix.T
+        # Isolates free DoFs. Currently ignores non-zero fixed nodes.
+        # TODO: Implement the contribution of non-zero fixed nodes.
         sep_index = np.where(np.isnan(self.bc_shuffle))[0][0]
         Aff = A_shuffle[sep_index:self.total_dof,sep_index:self.total_dof]
         Bff = B_shuffle[sep_index:self.total_dof,sep_index:self.total_dof]
+        # Solves for the eigenvalues and eigenvectors
         self.eigval, vec = sp.linalg.eig(Aff, b=Bff)
         n_sorted = np.argsort(self.eigval)
+
+        # Sorts results from lowest to highest eigenvalue
         self.eigval = self.eigval[n_sorted]
         vec = vec[:, n_sorted]
 
+        # Initializes return eigenvector array
         self.eigvec = np.zeros((self.total_dof, self.total_dof))
 
+        # Adds in fixed DoFs and unshuffles eigenvector
         for i in range(self.total_dof-sep_index):
             self.eigvec[sep_index:self.total_dof, i] = vec[:, i]
             self.eigvec[:, i] = self.shuffle_matrix.T @ self.eigvec[:, i]
         
         return self.eigval, self.eigvec
-
-
-    
-    def element_eigenmode_study(self, eigenmatrix: Callable):
-        """Performs an element-by-element eigenmode study on the mesh:
-
-        A = lambda B d
-        
-        where A and B depend on the matrix.
-        """
-        for (n1, n2, el) in self.edges.data('object'):
-            node1 = self.nodes[n1]['object']
-            node2 = self.nodes[n2]['object']
-            n_free = np.argwhere(np.isnan(np.append(node1.bc, node2.bc)))[:, 0]
-            node_tuple = (node1, node2)
-            el.A_matrix, el.B_matrix = eigenmatrix(node_tuple, el)
-            el.eigval, el.eigvec = sp.linalg.eig(
-                el.A_matrix[n_free, :][:, n_free], 
-                b=el.B_matrix[n_free, :][:, n_free]
-            )
-            pass
