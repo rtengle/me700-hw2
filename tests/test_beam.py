@@ -33,3 +33,7 @@ def test_x_simple_simple():
 def test_shape():
     s_func, s_true = run_test_shape()
     assert np.linalg.norm(s_func - s_true) <= 1e-6
+
+def test_plot():
+    run_test_plot()
+    pass

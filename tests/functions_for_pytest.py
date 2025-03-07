@@ -2,6 +2,8 @@ from mesh import Mesh
 from beam import Beam
 import numpy as np
 import pytest
+import matplotlib.pyplot as plt
+from random_utils import *
 
 def run_test_x_axial():
     # Tests pure axial loading
@@ -243,3 +245,19 @@ def run_test_shape():
     sx = np.array([d1[0]*(1-z) + d2[0]*z for z in xi])
     strue = np.array([sx, sy, sz]).T
     return s, strue
+
+def run_test_plot():
+    mesh, x, d, f, r, l, critload = run_test_xyz_discrete()
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+    mesh.plot(ax, disp_scale=10)
+    ax.set_xlabel('X-Axis')
+    ax.set_ylabel('Y-Axis')
+    ax.set_zlabel('Z-Axis')
+    set_axes_equal(ax)
+
+    eigval, eigvec = mesh.global_eigenmode_study(Beam.beam_buckling_eigenmatrix)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+    mesh.plot_displacement(ax, eigvec[:, 0], disp_scale=5, force_scale=10)
