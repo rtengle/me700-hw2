@@ -245,7 +245,6 @@ class Beam(Element):
 
         return G.T @ K @ G, -G.T @ Kg @ G
 
-
     def __init__(self, E: float, A: float, Iy: float, Iz: float, J:float, v: float, y: np.ndarray):
         self.E = E
         self.A = A

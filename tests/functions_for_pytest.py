@@ -23,6 +23,11 @@ def run_test_x_axial():
 
     x, f = mesh.solve()
 
+    eigval, eigvec = mesh.global_eigenmode_study(Beam.beam_buckling_eigenmatrix)
+
+    l = eigval[0]
+    b = eigvec[:,0]
+
     d_n1 = np.array([0, 0, 0, 0, 0, 0])
     d_n2 = np.array([F*L/(E*A), 0, 0, 0, 0, 0])
     d = np.append(d_n1, d_n2)
@@ -31,10 +36,9 @@ def run_test_x_axial():
     r_n2 = np.array([0, 0, 0, 0, 0, 0])
     r = np.append(r_n1, r_n2)
 
-    print(x)
-    print(f)
+    critload = np.pi**2 * E * np.min([Iy, Iz]) / (4*L**2)
 
-    return mesh, x, d, f, r
+    return mesh, x, d, f, r, np.abs(l*F), critload
 
 def run_test_xyz_axial():
     mesh = Mesh(6)
@@ -143,3 +147,5 @@ def run_test_x_simple_simple():
     ])
 
     return mesh, x, d, f, r
+
+

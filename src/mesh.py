@@ -631,7 +631,7 @@ class Mesh(DiGraph):
         Bff = B_shuffle[sep_index:self.total_dof,sep_index:self.total_dof]
         # Solves for the eigenvalues and eigenvectors
         self.eigval, vec = sp.linalg.eig(Aff, b=Bff)
-        n_sorted = np.argsort(self.eigval)
+        n_sorted = np.argsort(np.abs(self.eigval))
 
         # Sorts results from lowest to highest eigenvalue
         self.eigval = self.eigval[n_sorted]
