@@ -513,7 +513,7 @@ class Mesh(DiGraph):
             if plot_labels:
                 ax.text(*(deformed_pos), f"E({n1}, {n2})", color='#D41159')
 
-    def plot_displacement(self, ax: Axes, disp: np.ndarray, disp_scale=1, force_scale=1, xi_steps = 50, plot_labels:bool=True):
+    def plot_displacement(self, ax: Axes, disp: np.ndarray, disp_scale=1, force_scale=1, xi_steps = 50, plot_labels:bool=False):
         """Same as plot but for a set of given global displacements.
         
         Attributes
